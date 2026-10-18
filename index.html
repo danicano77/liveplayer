@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sons">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>Sons en directe</title>
 <style>
 :root{--bg:#000;--panel:#000;--line:#333;--ink:#f2efe9;--mute:#8a93a8;--amber:#ffb627;--amber-d:#c98a0a;--red:#e5636b}
@@ -178,6 +185,7 @@ document.addEventListener('keydown',e=>{ if(e.code==='Space'){e.preventDefault()
   if(navigator.storage?.persist)navigator.storage.persist(); }catch(e){ tracks=[]; }
  if(tracks.length)load(0); else render();
 })();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
 </html>
