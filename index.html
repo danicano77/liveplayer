@@ -19,23 +19,23 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation}
 #app{flex:1;min-height:0;display:flex;flex-direction:column}
-.player{flex:1 1 55%;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:16px 20px 12px;gap:10px}
+.player{flex:1 1 0;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:14px 20px 28px;gap:10px}
 .now{width:100%;text-align:center}
 .now h1{margin:0;font-size:clamp(22px,5vw,38px);font-weight:700;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .now p{margin:6px 0 0;color:var(--mute);font-size:clamp(14px,2.6vw,18px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar{width:min(560px,100%);display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums;color:var(--mute);font-size:14px}
 .track{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
 .track i{display:block;height:100%;width:0;background:var(--amber)}
-#play{flex:0 1 auto;width:min(60vw,46vh,340px);aspect-ratio:1;border-radius:50%;background:var(--amber);color:#1a1405;display:grid;place-items:center;box-shadow:0 0 0 10px rgba(255,182,39,.12),0 14px 40px rgba(0,0,0,.45);transition:transform .08s}
+#play{flex:0 1 auto;width:min(58vw,34vh,340px);aspect-ratio:1;border-radius:50%;background:var(--amber);color:#1a1405;display:grid;place-items:center;box-shadow:0 0 0 10px rgba(255,182,39,.12),0 14px 40px rgba(0,0,0,.45);transition:transform .08s}
 #play:active{transform:scale(.96);background:var(--amber-d)}
 #play svg{width:46%;height:46%}
 #play.on{background:var(--ink);box-shadow:0 0 0 10px rgba(242,239,233,.12),0 14px 40px rgba(0,0,0,.45)}
 .ctl{display:flex;gap:16px;align-items:center}
-.ctl button{width:clamp(86px,21vw,130px);height:clamp(68px,12vh,96px);border-radius:20px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center}
+.ctl button{width:clamp(86px,21vw,130px);height:clamp(60px,10vh,92px);border-radius:20px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center}
 .ctl button:active{background:#222}
 .ctl button:disabled{opacity:.3}
 .ctl svg{width:40px;height:40px}
-.list{flex:1 1 45%;min-height:0;display:flex;flex-direction:column;background:var(--panel);border-top:1px solid var(--line)}
+.list{flex:0 0 34dvh;min-height:190px;display:flex;flex-direction:column;background:var(--panel);border-top:1px solid var(--line)}
 .head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;gap:8px}
 .head b{font-size:16px}
 .head div{display:flex;gap:8px}
@@ -54,7 +54,7 @@ li .m.x{color:var(--red)}
 @media (orientation:landscape) and (min-width:700px){
  #app{flex-direction:row}
  .player{flex:1 1 55%}
- .list{flex:1 1 45%;border-top:0;border-left:1px solid var(--line)}
+ .list{flex:1 1 45%;min-height:0;border-top:0;border-left:1px solid var(--line)}
  #play{width:min(40vw,60vh,320px)}
 }
 @media (prefers-reduced-motion:reduce){#play{transition:none}}
