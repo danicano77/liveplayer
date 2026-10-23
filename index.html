@@ -24,9 +24,13 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-
 .now h1{margin:0;font-size:clamp(22px,5vw,38px);font-weight:700;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .now p{margin:6px 0 0;color:var(--mute);font-size:clamp(14px,2.6vw,18px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar{width:min(560px,100%);display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums;color:var(--mute);font-size:14px}
+.vol{width:min(560px,100%);display:flex;align-items:center;gap:10px;color:var(--mute);font-size:14px;font-variant-numeric:tabular-nums}
+.vol svg{width:22px;height:22px;flex:none}
+.vol input{flex:1;min-width:0;height:36px;margin:0;accent-color:var(--amber)}
+.vol span{width:44px;text-align:right}
 .track{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
 .track i{display:block;height:100%;width:0;background:var(--amber)}
-#play{flex:0 1 auto;width:min(58vw,34vh,340px);aspect-ratio:1;border-radius:50%;background:var(--amber);color:#1a1405;display:grid;place-items:center;box-shadow:0 0 0 10px rgba(255,182,39,.12),0 14px 40px rgba(0,0,0,.45);transition:transform .08s}
+#play{flex:0 1 auto;width:min(56vw,30vh,340px);aspect-ratio:1;border-radius:50%;background:var(--amber);color:#1a1405;display:grid;place-items:center;box-shadow:0 0 0 10px rgba(255,182,39,.12),0 14px 40px rgba(0,0,0,.45);transition:transform .08s}
 #play:active{transform:scale(.96);background:var(--amber-d)}
 #play svg{width:46%;height:46%}
 #play.on{background:var(--ink);box-shadow:0 0 0 10px rgba(242,239,233,.12),0 14px 40px rgba(0,0,0,.45)}
@@ -66,6 +70,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
  <section class="player">
   <div class="now"><h1 id="title">Cap so carregat</h1><p id="next"></p></div>
   <div class="bar"><span id="cur">0:00</span><div class="track"><i id="fill"></i></div><span id="dur">0:00</span></div>
+  <div class="vol"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 4V5L7 9zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="150" value="100" aria-label="Volum d'aquest so"><span id="volv">100%</span></div>
   <button id="play" aria-label="Reproduir"></button>
   <div class="ctl">
    <button id="prev" aria-label="So anterior"></button>
@@ -80,7 +85,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
   <ol id="ol"></ol>
  </section>
 </div>
-<input type="file" id="file" accept="audio/*" multiple hidden>
+<input type="file" id="file" multiple hidden>
 <audio id="au" preload="auto"></audio>
 <script>
 const $=id=>document.getElementById(id);
@@ -93,6 +98,9 @@ const au=$('au'), ICON={
 $('prev').innerHTML=ICON.prev;$('stop').innerHTML=ICON.stop;$('nextb').innerHTML=ICON.next;
 
 let tracks=[], cur=-1, objUrl=null, edit=false, db;
+let vols={}; try{vols=JSON.parse(localStorage.getItem('sons-vols')||'{}');}catch(e){}
+const saveVols=()=>{try{localStorage.setItem('sons-vols',JSON.stringify(vols));}catch(e){}};
+const level=()=>cur>=0?(tracks[cur].vol??1):1;
 
 /* ---------- Emmagatzematge (IndexedDB) ---------- */
 function openDB(){return new Promise((res,rej)=>{
@@ -108,21 +116,46 @@ function fmt(s){if(!isFinite(s))return'0:00';s=Math.floor(s);return Math.floor(s
 function load(i){
  if(!tracks.length){cur=-1;au.removeAttribute('src');au.load();render();return;}
  i=Math.max(0,Math.min(tracks.length-1,i));
- au.pause();
+ au.pause(); clearFade();
  if(objUrl)URL.revokeObjectURL(objUrl);
  objUrl=URL.createObjectURL(tracks[i].blob);
- au.src=objUrl;au.load();cur=i;
+ au.src=objUrl;au.load();cur=i;applyVol();
  updateSession();render();
 }
-function toggle(){ if(cur<0)return; au.paused?au.play().catch(()=>{}):au.pause(); }
-function stop(){ if(cur<0)return; au.pause(); au.currentTime=0; progress(); syncPlay(); }
+/* Fade out amb Web Audio (també funciona a iOS, on audio.volume no es pot canviar) */
+const FADE=0.8; let ctx=null,gain=null,fading=false,fadeT=null;
+function ensureAudio(){ if(ctx)return; try{ ctx=new (window.AudioContext||window.webkitAudioContext)();
+ gain=ctx.createGain(); ctx.createMediaElementSource(au).connect(gain); gain.connect(ctx.destination); }catch(e){ctx=null;gain=null;} }
+function setGain(v,t){ if(!gain)return; const g=gain.gain,n=ctx.currentTime; g.cancelScheduledValues(n); g.setValueAtTime(g.value,n); g.linearRampToValueAtTime(v,n+t); }
+function clearFade(){ if(fadeT){clearTimeout(fadeT);fadeT=null;} fading=false; if(gain){gain.gain.cancelScheduledValues(0);gain.gain.value=level();} }
+function applyVol(){ const v=level(); ensureAudio();
+ if(!fading){ if(gain){gain.gain.cancelScheduledValues(0);gain.gain.value=v;} else au.volume=Math.min(1,v); }
+ $('vol').value=Math.round(v*100); $('volv').textContent=Math.round(v*100)+'%'; }
+$('vol').oninput=()=>{ if(cur<0)return; const v=$('vol').value/100; tracks[cur].vol=v; vols[tracks[cur].id]=v; applyVol(); };
+$('vol').onchange=saveVols;
+function fadeOut(done){
+ if(au.paused||!gain){ au.pause(); done(); syncPlay(); return; }
+ fading=true; setGain(0,FADE); syncPlay();
+ fadeT=setTimeout(()=>{ au.pause(); done(); clearFade(); syncPlay(); },FADE*1000+40);
+}
+function toggle(){
+ if(cur<0)return;
+ if(fading){ clearTimeout(fadeT); fadeT=null; fading=false; setGain(level(),.08); syncPlay(); return; }
+ if(!au.paused){ fadeOut(()=>{}); return; }
+ ensureAudio(); if(ctx)ctx.resume(); clearFade(); au.play().catch(()=>{});
+}
+function stop(){
+ if(cur<0)return;
+ if(fading){ clearFade(); au.pause(); au.currentTime=0; progress(); syncPlay(); return; }
+ fadeOut(()=>{ au.currentTime=0; progress(); });
+}
 function go(d){ if(cur<0)return; const n=cur+d; if(n<0||n>=tracks.length)return; load(n); }
 au.addEventListener('ended',()=>{ if(cur<tracks.length-1)load(cur+1); else{au.currentTime=0;} syncPlay(); });
 ['play','pause','loadedmetadata','emptied'].forEach(e=>au.addEventListener(e,()=>{syncPlay();progress();}));
 au.addEventListener('timeupdate',progress);
 function progress(){ $('cur').textContent=fmt(au.currentTime); $('dur').textContent=fmt(au.duration);
  $('fill').style.width=(au.duration?au.currentTime/au.duration*100:0)+'%'; }
-function syncPlay(){ const b=$('play'), on=!au.paused&&cur>=0;
+function syncPlay(){ const b=$('play'), on=!au.paused&&cur>=0&&!fading;
  b.innerHTML=on?ICON.pause:ICON.play; b.classList.toggle('on',on);
  b.setAttribute('aria-label',on?'Pausar':'Reproduir'); wake(on); }
 
@@ -133,7 +166,7 @@ async function wake(on){ try{ if(on&&!lock&&navigator.wakeLock){lock=await navig
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&!au.paused)wake(true); });
 function updateSession(){ if(!('mediaSession' in navigator))return;
  navigator.mediaSession.metadata=new MediaMetadata({title:tracks[cur]?.name||''});
- const h={play:()=>au.play(),pause:()=>au.pause(),previoustrack:()=>go(-1),nexttrack:()=>go(1),stop:stop};
+ const h={play:()=>{if(au.paused||fading)toggle();},pause:()=>{if(!au.paused&&!fading)toggle();},previoustrack:()=>go(-1),nexttrack:()=>go(1),stop:stop};
  for(const k in h)try{navigator.mediaSession.setActionHandler(k,h[k]);}catch(e){} }
 
 /* ---------- Interfície ---------- */
@@ -142,7 +175,7 @@ function render(){
  $('title').textContent=has?tracks[cur].name:'Cap so carregat';
  $('next').textContent=has?(tracks[cur+1]?'Següent: '+tracks[cur+1].name:'Últim so'):'Afegeix sons per començar';
  $('prev').disabled=!has||cur<=0; $('nextb').disabled=!has||cur>=tracks.length-1;
- $('stop').disabled=!has; $('play').disabled=!has; $('play').style.opacity=has?1:.35;
+ $('stop').disabled=!has; $('play').disabled=!has; $('vol').disabled=!has; $('play').style.opacity=has?1:.35;
  $('count').textContent=tracks.length?tracks.length+(tracks.length==1?' so':' sons'):'Sons';
  $('edit').textContent=edit?'Fet':'Editar'; $('edit').classList.toggle('hl',edit);
  const ol=$('ol'); ol.innerHTML='';
@@ -163,17 +196,18 @@ function move(i,d){ const j=i+d; if(j<0||j>=tracks.length)return; const id=track
  [tracks[i],tracks[j]]=[tracks[j],tracks[i]]; cur=tracks.findIndex(t=>t.id===id); saveOrder(); render(); }
 function rename(i){ const n=prompt('Nom del so',tracks[i].name); if(n&&n.trim()){tracks[i].name=n.trim();store('readwrite').put(tracks[i]);if(i===cur)updateSession();render();} }
 function remove(i){ if(!confirm('Esborrar «'+tracks[i].name+'»?'))return;
- const wasCur=i===cur, id=tracks[i].id; store('readwrite').delete(id); tracks.splice(i,1);
+ const wasCur=i===cur, id=tracks[i].id; store('readwrite').delete(id); delete vols[id]; saveVols(); tracks.splice(i,1);
  if(wasCur){ load(Math.min(i,tracks.length-1)); } else { if(i<cur)cur--; render(); } saveOrder(); }
 
 $('play').onclick=toggle; $('stop').onclick=stop; $('prev').onclick=()=>go(-1); $('nextb').onclick=()=>go(1);
 $('edit').onclick=()=>{edit=!edit;render();};
 $('add').onclick=()=>$('file').click();
 $('file').onchange=async e=>{
- const files=[...e.target.files]; if(!files.length)return;
+ const ok=f=>/^audio\//.test(f.type)||/\.(mp3|wav|m4a|aac|ogg|oga|opus|flac|aif|aiff|wma)$/i.test(f.name);
+ const all=[...e.target.files], files=all.filter(ok); if(all.length>files.length)alert((all.length-files.length)+' arxiu(s) ignorat(s) per no ser d\'àudio.'); if(!files.length){e.target.value='';return;}
  const base=tracks.length;
  for(const [k,f] of files.entries()){
-  const rec={name:f.name.replace(/\.[^.]+$/,''),blob:f,order:base+k};
+  const rec={name:f.name.replace(/\.[^.]+$/,''),blob:f,order:base+k,vol:1};
   rec.id=await req(store('readwrite').add(rec)); tracks.push(rec);
  }
  e.target.value=''; if(cur<0)load(0); else render();
@@ -181,7 +215,7 @@ $('file').onchange=async e=>{
 document.addEventListener('keydown',e=>{ if(e.code==='Space'){e.preventDefault();toggle();} else if(e.code==='ArrowRight')go(1); else if(e.code==='ArrowLeft')go(-1); });
 
 (async()=>{
- try{ db=await openDB(); tracks=(await req(store('readonly').getAll())).sort((a,b)=>a.order-b.order);
+ try{ db=await openDB(); tracks=(await req(store('readonly').getAll())).sort((a,b)=>a.order-b.order); tracks.forEach(t=>t.vol=vols[t.id]??1);
   if(navigator.storage?.persist)navigator.storage.persist(); }catch(e){ tracks=[]; }
  if(tracks.length)load(0); else render();
 })();
