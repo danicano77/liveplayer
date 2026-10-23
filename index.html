@@ -61,6 +61,14 @@ li .m.x{color:var(--red)}
  .list{flex:1 1 45%;min-height:0;border-top:0;border-left:1px solid var(--line)}
  #play{width:min(40vw,60vh,320px)}
 }
+@media (max-height:520px) and (orientation:portrait){
+ html,body{height:auto;min-height:100%;overflow-x:hidden;overflow-y:auto}
+ #app{flex:none;min-height:100dvh}
+ .player{flex:0 0 auto;min-height:400px;padding:8px 14px 16px;gap:8px}
+ .list{flex:0 0 35dvh;min-height:140px}
+ #play{width:min(42vw,20vh,190px)}
+ .ctl button{height:52px}
+}
 @media (prefers-reduced-motion:reduce){#play{transition:none}}
 button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 </style>
@@ -69,7 +77,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 <div id="app">
  <section class="player">
   <div class="now"><h1 id="title">Cap so carregat</h1><p id="next"></p></div>
-  <div class="bar"><span id="cur">0:00</span><div class="track"><i id="fill"></i></div><span id="dur">0:00</span></div>
+    <div class="bar"><span id="cur">0:00</span><div class="track" id="progress" role="progressbar" aria-label="Progrés de reproducció" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><i id="fill"></i></div><span id="dur">0:00</span></div>
   <div class="vol"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 4V5L7 9zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="150" value="100" aria-label="Volum d'aquest so"><span id="volv">100%</span></div>
   <button id="play" aria-label="Reproduir"></button>
   <div class="ctl">
@@ -128,9 +136,10 @@ function ensureAudio(){ if(ctx)return; try{ ctx=new (window.AudioContext||window
  gain=ctx.createGain(); ctx.createMediaElementSource(au).connect(gain); gain.connect(ctx.destination); }catch(e){ctx=null;gain=null;} }
 function setGain(v,t){ if(!gain)return; const g=gain.gain,n=ctx.currentTime; g.cancelScheduledValues(n); g.setValueAtTime(g.value,n); g.linearRampToValueAtTime(v,n+t); }
 function clearFade(){ if(fadeT){clearTimeout(fadeT);fadeT=null;} fading=false; if(gain){gain.gain.cancelScheduledValues(0);gain.gain.value=level();} }
-function applyVol(){ const v=level(); ensureAudio();
- if(!fading){ if(gain){gain.gain.cancelScheduledValues(0);gain.gain.value=v;} else au.volume=Math.min(1,v); }
- $('vol').value=Math.round(v*100); $('volv').textContent=Math.round(v*100)+'%'; }
+function applyVol(){ ensureAudio(); const requested=level(), max=gain?1.5:1, v=Math.min(requested,max);
+ if(cur>=0&&v!==requested){tracks[cur].vol=v;vols[tracks[cur].id]=v;saveVols();}
+ if(!fading){ if(gain){gain.gain.cancelScheduledValues(0);gain.gain.value=v;} else au.volume=v; }
+ $('vol').max=String(max*100); $('vol').value=Math.round(v*100); $('volv').textContent=Math.round(v*100)+'%'; }
 $('vol').oninput=()=>{ if(cur<0)return; const v=$('vol').value/100; tracks[cur].vol=v; vols[tracks[cur].id]=v; applyVol(); };
 $('vol').onchange=saveVols;
 function fadeOut(done){
@@ -153,8 +162,10 @@ function go(d){ if(cur<0)return; const n=cur+d; if(n<0||n>=tracks.length)return;
 au.addEventListener('ended',()=>{ if(cur<tracks.length-1)load(cur+1); else{au.currentTime=0;} syncPlay(); });
 ['play','pause','loadedmetadata','emptied'].forEach(e=>au.addEventListener(e,()=>{syncPlay();progress();}));
 au.addEventListener('timeupdate',progress);
-function progress(){ $('cur').textContent=fmt(au.currentTime); $('dur').textContent=fmt(au.duration);
- $('fill').style.width=(au.duration?au.currentTime/au.duration*100:0)+'%'; }
+function progress(){ const duration=Number.isFinite(au.duration)?au.duration:0, current=Number.isFinite(au.currentTime)?au.currentTime:0;
+ $('cur').textContent=fmt(current); $('dur').textContent=fmt(duration);
+ $('fill').style.width=(duration?current/duration*100:0)+'%';
+ const bar=$('progress'); bar.setAttribute('aria-valuemax',String(duration)); bar.setAttribute('aria-valuenow',String(Math.min(current,duration))); }
 function syncPlay(){ const b=$('play'), on=!au.paused&&cur>=0&&!fading;
  b.innerHTML=on?ICON.pause:ICON.play; b.classList.toggle('on',on);
  b.setAttribute('aria-label',on?'Pausar':'Reproduir'); wake(on); }
@@ -212,7 +223,10 @@ $('file').onchange=async e=>{
  }
  e.target.value=''; if(cur<0)load(0); else render();
 };
-document.addEventListener('keydown',e=>{ if(e.code==='Space'){e.preventDefault();toggle();} else if(e.code==='ArrowRight')go(1); else if(e.code==='ArrowLeft')go(-1); });
+document.addEventListener('keydown',e=>{
+ if(e.target instanceof Element&&e.target.closest('input,textarea,select,button,[contenteditable="true"]'))return;
+ if(e.code==='Space'){e.preventDefault();toggle();} else if(e.code==='ArrowRight')go(1); else if(e.code==='ArrowLeft')go(-1);
+});
 
 (async()=>{
  try{ db=await openDB(); tracks=(await req(store('readonly').getAll())).sort((a,b)=>a.order-b.order); tracks.forEach(t=>t.vol=vols[t.id]??1);
