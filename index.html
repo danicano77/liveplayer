@@ -40,11 +40,14 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-
 .ctl button:disabled{opacity:.3}
 .ctl svg{width:40px;height:40px}
 .list{flex:0 0 34dvh;min-height:190px;display:flex;flex-direction:column;background:var(--panel);border-top:1px solid var(--line)}
-.head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;gap:8px}
+.head{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;gap:8px;flex-wrap:wrap}
 .head b{font-size:16px}
 .head div{display:flex;gap:8px}
 .pill{padding:10px 16px;border-radius:999px;background:var(--bg);border:1px solid var(--line);font-size:15px}
 .pill.hl{background:var(--amber);color:#1a1405;border-color:var(--amber);font-weight:600}
+.pill:disabled{opacity:.3}
+.pill.ic{padding:10px 12px;display:grid;place-items:center}
+.pill.ic svg{width:20px;height:20px;display:block}
 ol{list-style:none;margin:0;padding:0 8px 8px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch}
 li{display:flex;align-items:center;gap:6px;border-radius:12px}
 li.cur{background:rgba(255,182,39,.14)}
@@ -88,12 +91,13 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
  </section>
  <section class="list">
   <div class="head"><b id="count">Sons</b>
-   <div><button class="pill" id="edit">Editar</button><button class="pill hl" id="add">+ Afegir sons</button></div>
+   <div><button class="pill ic" id="save" aria-label="Desar la llista en un fitxer JSON" title="Desar la llista (JSON)"></button><button class="pill ic" id="load" aria-label="Carregar una llista des d'un fitxer JSON" title="Carregar llista (JSON)"></button><button class="pill" id="edit">Editar</button><button class="pill hl" id="add">+ Afegir sons</button></div>
   </div>
   <ol id="ol"></ol>
  </section>
 </div>
 <input type="file" id="file" multiple hidden>
+<input type="file" id="jfile" accept=".json,application/json" hidden>
 <audio id="au" preload="auto"></audio>
 <script>
 const $=id=>document.getElementById(id);
@@ -102,8 +106,10 @@ const au=$('au'), ICON={
  pause:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>',
  stop:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>',
  prev:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>',
- next:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5l11 7L4 19z"/></svg>'};
-$('prev').innerHTML=ICON.prev;$('stop').innerHTML=ICON.stop;$('nextb').innerHTML=ICON.next;
+ next:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5l11 7L4 19z"/></svg>',
+ save:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
+ load:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zM5 18v2h14v-2H5z"/></svg>'};
+$('prev').innerHTML=ICON.prev;$('stop').innerHTML=ICON.stop;$('nextb').innerHTML=ICON.next;$('save').innerHTML=ICON.save;$('load').innerHTML=ICON.load;
 
 let tracks=[], cur=-1, objUrl=null, edit=false, db;
 let vols={}; try{vols=JSON.parse(localStorage.getItem('sons-vols')||'{}');}catch(e){}
@@ -187,10 +193,11 @@ function render(){
  $('next').textContent=has?(tracks[cur+1]?'Següent: '+tracks[cur+1].name:'Últim so'):'Afegeix sons per començar';
  $('prev').disabled=!has||cur<=0; $('nextb').disabled=!has||cur>=tracks.length-1;
  $('stop').disabled=!has; $('play').disabled=!has; $('vol').disabled=!has; $('play').style.opacity=has?1:.35;
+ $('save').disabled=!tracks.length; $('save').style.opacity=tracks.length?1:.3;
  $('count').textContent=tracks.length?tracks.length+(tracks.length==1?' so':' sons'):'Sons';
  $('edit').textContent=edit?'Fet':'Editar'; $('edit').classList.toggle('hl',edit);
  const ol=$('ol'); ol.innerHTML='';
- if(!tracks.length){ol.innerHTML='<div class="empty">Encara no hi ha cap so.<br>Toca «+ Afegir sons» i tria els arxius d\'àudio.</div>';syncPlay();progress();return;}
+ if(!tracks.length){ol.innerHTML='<div class="empty">Encara no hi ha cap so.<br>Toca «+ Afegir sons» i tria els arxius d\'àudio,<br>o carrega una llista desada amb el botó de dalt.</div>';syncPlay();progress();return;}
  tracks.forEach((t,i)=>{
   const li=document.createElement('li'); if(i===cur)li.className='cur';
   li.innerHTML='<span class="n">'+(i+1)+'</span>';
@@ -222,6 +229,50 @@ $('file').onchange=async e=>{
   rec.id=await req(store('readwrite').add(rec)); tracks.push(rec);
  }
  e.target.value=''; if(cur<0)load(0); else render();
+};
+/* ---------- Llistes en JSON ---------- */
+const b64=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(b);});
+$('save').onclick=async()=>{
+ if(!tracks.length){alert('Encara no hi ha sons per desar.');return;}
+ try{
+  const pack={app:'sons-directe',version:1,exported:new Date().toISOString(),
+   tracks:await Promise.all(tracks.map(async t=>({name:t.name,vol:t.vol??1,type:t.blob.type,data:await b64(t.blob)})))};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(pack)],{type:'application/json'}));
+  const a=document.createElement('a');a.href=url;a.download='sons-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+ }catch(e){alert('No s\'ha pogut desar la llista.');}
+};
+$('load').onclick=()=>$('jfile').click();
+$('jfile').onchange=async e=>{
+ const f=e.target.files[0];e.target.value='';
+ if(!f)return;
+ if(!db){alert('No hi ha emmagatzematge disponible.');return;}
+ let pack;try{pack=JSON.parse(await f.text());}catch(err){alert('El fitxer no és un JSON vàlid.');return;}
+ if(!pack||pack.app!=='sons-directe'||!Array.isArray(pack.tracks)){alert('Aquest JSON no és una llista de sons d\'aquesta app.');return;}
+ const news=[];
+ for(const t of pack.tracks){
+  if(!t||typeof t.name!=='string'||!t.name.trim()||typeof t.data!=='string')continue;
+  let bytes;try{bytes=Uint8Array.from(atob(t.data),c=>c.charCodeAt(0));}catch(err){continue;}
+  const vol=(typeof t.vol==='number'&&isFinite(t.vol)&&t.vol>0)?Math.min(t.vol,1.5):1;
+  const type=(typeof t.type==='string'&&/^audio\//.test(t.type))?t.type:'audio/mpeg';
+  news.push({name:t.name.trim(),blob:new Blob([bytes],{type}),vol});
+ }
+ if(!news.length){alert('El fitxer no conté cap so vàlid.');return;}
+ if(tracks.length&&confirm('Vols substituir els '+tracks.length+(tracks.length==1?' so actual':' sons actuals')+' pels del fitxer?\n(Cancel·la per afegir-los al final de la llista.)')){
+  clearFade();au.pause();
+  if(objUrl){URL.revokeObjectURL(objUrl);objUrl=null;}
+  au.removeAttribute('src');au.load();
+  store('readwrite').clear();tracks=[];vols={};saveVols();cur=-1;
+ }
+ const base=tracks.length;
+ for(const [k,t] of news.entries()){
+  const rec={name:t.name,blob:t.blob,order:base+k,vol:t.vol};
+  rec.id=await req(store('readwrite').add(rec));tracks.push(rec);vols[rec.id]=t.vol;
+ }
+ saveVols();
+ if(cur<0)load(0);else render();
+ alert(news.length+(news.length==1?' so carregat des del fitxer.':' sons carregats des del fitxer.'));
 };
 document.addEventListener('keydown',e=>{
  if(e.target instanceof Element&&e.target.closest('input,textarea,select,button,[contenteditable="true"]'))return;

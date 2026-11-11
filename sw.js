@@ -1,4 +1,4 @@
-const CACHE='sons-directe-v4';
+const CACHE='sons-directe-v5';
 const FILES=['./','./index.html','./manifest.webmanifest','./icons/icon-180.png','./icons/icon-192.png','./icons/icon-512.png'];
 const SHELL=new Set(FILES.map(file=>new URL(file,self.registration.scope).href));
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()));});
